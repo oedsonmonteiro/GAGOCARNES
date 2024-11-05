@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
 import pandas as pd
 import os
 import matplotlib.pyplot as plt
@@ -11,6 +12,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "*"}})  # Permitir requisições de qualquer origem
 
 # Diretório de saída para a planilha e gráficos
 OUTPUT_DIR = 'output'
@@ -49,6 +51,10 @@ def adicionar_despesas():
     try:
         logger.info("Recebendo dados para adicionar despesas.")
         data = request.get_json()
+        if not data:
+            logger.warning("Dados da requisição vazios ou inválidos.")
+            return jsonify({"error": "Corpo da requisição vazio ou dados inválidos."}), 400
+
         corte = data.get('corte')
         peso = data.get('peso')
         preco = data.get('preco')
@@ -84,7 +90,7 @@ def adicionar_despesas():
 
         return jsonify({"message": "Despesas adicionadas com sucesso!", "arquivo": output_file})
     except Exception as e:
-        logger.error(f"Erro ao adicionar despesas: {str(e)}")
+        logger.error(f"Erro ao adicionar despesas: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 # Rota para gerar gráficos dos dados
@@ -117,7 +123,7 @@ def gerar_graficos():
         logger.info("Todos os gráficos gerados com sucesso.")
         return jsonify({"message": "Gráficos gerados com sucesso!", "graficos": graficos})
     except Exception as e:
-        logger.error(f"Erro ao gerar gráficos: {str(e)}")
+        logger.error(f"Erro ao gerar gráficos: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 # Rota para download da planilha
@@ -132,7 +138,7 @@ def download_planilha():
             logger.warning("Planilha não encontrada.")
             return jsonify({"error": "Planilha não encontrada."}), 404
     except Exception as e:
-        logger.error(f"Erro ao baixar a planilha: {str(e)}")
+        logger.error(f"Erro ao baixar a planilha: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
