@@ -9,6 +9,9 @@ app = Flask(__name__)
 OUTPUT_DIR = 'output'
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+# Caminho do arquivo de saída
+output_file = os.path.join(OUTPUT_DIR, 'tabela_despesas.xlsx')
+
 # Rota para importar e visualizar uma tabela CSV
 @app.route('/importar_csv', methods=['POST'])
 def importar_csv():
@@ -28,38 +31,42 @@ def importar_csv():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Rota para adicionar colunas e linhas sincronizadas com a calculadora
-@app.route('/adicionar_coluna_linha', methods=['POST'])
-def adicionar_coluna_linha():
+# Rota para adicionar despesas em linhas separadas
+@app.route('/adicionar_despesas', methods=['POST'])
+def adicionar_despesas():
     try:
         data = request.get_json()
-        coluna_nome = data.get('coluna_nome')
-        linha_dados = data.get('linha_dados', {})
-        
-        # Verificar se a coluna e os dados foram fornecidos
-        if not coluna_nome or not linha_dados:
-            return jsonify({"error": "Nome da coluna e dados da linha são obrigatórios."}), 400
+        corte = data.get('corte')
+        peso = data.get('peso')
+        preco = data.get('preco')
+        quantidade = data.get('quantidade')
+        despesas = data.get('despesas', [])
 
-        # Carregar a tabela existente
-        tabela_path = os.path.join(OUTPUT_DIR, 'tabela_importada.xlsx')
-        if not os.path.exists(tabela_path):
-            return jsonify({"error": "Tabela não encontrada. Importe primeiro um arquivo CSV."}), 404
+        # Verificar se as despesas foram fornecidas
+        if not despesas:
+            return jsonify({"error": "As despesas devem ser fornecidas."}), 400
 
-        df = pd.read_excel(tabela_path)
+        # Criar um DataFrame vazio ou carregar existente
+        if os.path.exists(output_file):
+            df = pd.read_excel(output_file)
+        else:
+            df = pd.DataFrame(columns=['Descrição', 'Valor (R$)', 'Corte', 'Peso (kg)', 'Preço por Kg (R$)', 'Quantidade'])
 
-        # Adicionar a nova coluna se não existir
-        if coluna_nome not in df.columns:
-            df[coluna_nome] = ''
+        # Adicionar as despesas em linhas separadas
+        for despesa in despesas:
+            df = pd.concat([df, pd.DataFrame([{
+                'Descrição': despesa['descricao'],
+                'Valor (R$)': despesa['valor'],
+                'Corte': corte,
+                'Peso (kg)': peso,
+                'Preço por Kg (R$)': preco,
+                'Quantidade': quantidade
+            }])], ignore_index=True)
 
-        # Adicionar a nova linha com os dados sincronizados
-        new_row = pd.Series(linha_dados, index=df.columns)
-        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+        # Salvar a planilha atualizada
+        df.to_excel(output_file, index=False)
 
-        # Salvar a tabela atualizada
-        tabela_atualizada_path = os.path.join(OUTPUT_DIR, 'tabela_atualizada.xlsx')
-        df.to_excel(tabela_atualizada_path, index=False)
-
-        return jsonify({"message": "Coluna e linha adicionadas com sucesso!", "arquivo": tabela_atualizada_path})
+        return jsonify({"message": "Despesas adicionadas com sucesso!", "arquivo": output_file})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -68,7 +75,7 @@ def adicionar_coluna_linha():
 def gerar_graficos():
     try:
         # Carregar a tabela existente
-        tabela_path = os.path.join(OUTPUT_DIR, 'tabela_atualizada.xlsx')
+        tabela_path = output_file
         if not os.path.exists(tabela_path):
             return jsonify({"error": "Tabela não encontrada. Importe ou atualize um arquivo."}), 404
 
@@ -85,6 +92,17 @@ def gerar_graficos():
             plt.close()
 
         return jsonify({"message": "Gráficos gerados com sucesso!", "diretorio_graficos": OUTPUT_DIR})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Rota para download da planilha
+@app.route('/download_planilha', methods=['GET'])
+def download_planilha():
+    try:
+        if os.path.exists(output_file):
+            return send_file(output_file, as_attachment=True)
+        else:
+            return jsonify({"error": "Planilha não encontrada."}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
