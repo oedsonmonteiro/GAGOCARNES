@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify, send_file
 import pandas as pd
 import os
 import matplotlib.pyplot as plt
+import base64
+from io import BytesIO
 
 app = Flask(__name__)
 
@@ -42,7 +44,6 @@ def adicionar_despesas():
         quantidade = data.get('quantidade')
         despesas = data.get('despesas', [])
 
-        # Verificar se as despesas foram fornecidas
         if not despesas:
             return jsonify({"error": "As despesas devem ser fornecidas."}), 400
 
@@ -74,24 +75,27 @@ def adicionar_despesas():
 @app.route('/gerar_graficos', methods=['GET'])
 def gerar_graficos():
     try:
-        # Carregar a tabela existente
-        tabela_path = output_file
-        if not os.path.exists(tabela_path):
+        if not os.path.exists(output_file):
             return jsonify({"error": "Tabela não encontrada. Importe ou atualize um arquivo."}), 404
 
-        df = pd.read_excel(tabela_path)
+        df = pd.read_excel(output_file)
+        graficos = []
 
-        # Criar gráficos para colunas numéricas
         for coluna in df.select_dtypes(include='number').columns:
             plt.figure()
             df[coluna].plot(kind='bar', title=coluna)
             plt.xlabel('Índice')
             plt.ylabel(coluna)
-            grafico_path = os.path.join(OUTPUT_DIR, f'grafico_{coluna}.png')
-            plt.savefig(grafico_path)
-            plt.close()
 
-        return jsonify({"message": "Gráficos gerados com sucesso!", "diretorio_graficos": OUTPUT_DIR})
+            buf = BytesIO()
+            plt.savefig(buf, format='png')
+            plt.close()
+            buf.seek(0)
+            image_base64 = base64.b64encode(buf.read()).decode('utf-8')
+
+            graficos.append({"coluna": coluna, "imagem": image_base64})
+
+        return jsonify({"message": "Gráficos gerados com sucesso!", "graficos": graficos})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
